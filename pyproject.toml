@@ -1,0 +1,9 @@
+[project]
+name = "vertex-defeitos"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = [
+    "google-cloud-aiplatform>=1.161.0",
+    "google-cloud-storage>=3.13.0",
+    "pillow>=12.3.0",
+]

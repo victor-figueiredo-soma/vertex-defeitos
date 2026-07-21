@@ -44,19 +44,22 @@ $env:GOOGLE_APPLICATION_CREDENTIALS = "C:\Users\Victor_figueiredo\Documents\Atac
 ## Passo a passo
 
 ```powershell
-# 0. Instalar dependências (idealmente num venv)
-pip install -r requirements.txt
+# 0. Instalar dependências
+uv sync                         # cria o .venv e instala tudo do pyproject.toml
+# (alternativa sem uv: pip install -r requirements.txt)
+
+# Nos passos seguintes, use "uv run python ..." para rodar dentro do ambiente.
 
 # 1. Gerar o dataset (se ainda não foi gerado — build/ já vem preenchido)
-python gerar_dataset.py
+uv run python gerar_dataset.py
 
 # 2. Subir imagens + JSONL para o Cloud Storage
-python upload_gcs.py            # use --dry-run primeiro para conferir
-                                # use --force para reenviar tudo
+uv run python upload_gcs.py            # use --dry-run primeiro para conferir
+                                       # use --force para reenviar tudo
 
 # 3. Disparar o fine-tuning no Vertex AI (GERA CUSTO)
-python criar_tuning_job.py                 # cria e acompanha até o fim
-python criar_tuning_job.py --no-wait       # cria e sai (acompanhe no Console)
+uv run python criar_tuning_job.py                 # cria e acompanha até o fim
+uv run python criar_tuning_job.py --no-wait       # cria e sai (acompanhe no Console)
 ```
 
 ## Configuração (via `config.py` ou variáveis de ambiente)
