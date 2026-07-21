@@ -1,0 +1,19 @@
+# Credenciais - NUNCA commitar
+*.json
+sa_key.json
+*.key
+*-key.json
+
+# Artefatos gerados pelo gerar_dataset.py (regeneraveis, grandes)
+build/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Sistema
+.DS_Store
+Thumbs.db
