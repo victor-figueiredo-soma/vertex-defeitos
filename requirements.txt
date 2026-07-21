@@ -1,0 +1,8 @@
+# Geracao de dataset (gerar_dataset.py)
+Pillow>=10.0.0
+
+# Upload para Cloud Storage (upload_gcs.py)
+google-cloud-storage>=2.14.0
+
+# Fine-tuning no Vertex AI (criar_tuning_job.py) - inclui o pacote vertexai
+google-cloud-aiplatform>=1.71.0
