@@ -10,6 +10,7 @@ uma devolução deve ser `APROVADO`, `REPROVADO` ou `INCONCLUSIVO`.
 
 ## Estrutura
 
+### Treinamento (raiz — inalterado)
 | Arquivo | Função |
 |---|---|
 | `gerar_dataset.py` | Lê as fotos, gera `build/staging/`, `train.jsonl`, `validation.jsonl`, manifesto e relatório de qualidade |
@@ -18,6 +19,70 @@ uma devolução deve ser `APROVADO`, `REPROVADO` ou `INCONCLUSIVO`.
 | `config.py` | Configuração compartilhada (projeto, região, bucket, modelo) |
 | `system_instruction.md` | Prompt do sistema (igual em treino e inferência) |
 | `catalogo_motivos.md` | Referência de rotulagem |
+
+### Aplicação de produção (`app/`)
+| Módulo | Função |
+|---|---|
+| `inferir_local.py` | **CLI de teste local** do modelo (imagem + motivo → JSON), sem infra |
+| `app/settings.py` | Config de runtime (endpoint, limiares, segredos) — reusa `config.py` |
+| `app/inference/classifier.py` | Chama o modelo afinado e valida o JSON de saída |
+| `app/routing/decision_router.py` | Política híbrida por confiança (auto vs. fila humana) |
+| `app/intake/` | Ingestão Outlook: `graph_client`, `email_parser`, `webhook` (Cloud Run) |
+| `app/persistence/` | `repository` (Firestore + GCS) e `counter` (contador atômico) |
+| `app/review/confirm.py` | Registra rótulo confirmado por humano → dispara re-treino |
+| `app/retrain/` | `build_dataset_from_prod` + `run_retrain` (Cloud Run Job) |
+| `deploy/` | `Dockerfile.intake` (serviço) e `Dockerfile.retrain` (job) |
+| `tests/` | Testes unitários das camadas puras |
+
+## Fluxo de produção e re-treino
+
+```
+Outlook ──Graph webhook──► Cloud Run (app/intake/webhook)
+        parser → GCS(inbox) → classifier → decision_router → Firestore
+                                 │
+              alta confiança → decisão automática
+              incerto/baixa   → fila humana → app/review/confirm
+                                                 │ (só rótulo confirmado)
+                                      contador atômico +1 ; ao atingir
+                                      RETRAIN_THRESHOLD_INPUTS → Pub/Sub
+                                                 │
+                                      Cloud Run Job (app/retrain/run_retrain):
+                                      build dataset → upload → tuning → ativa
+                                      novo endpoint (config/active_model)
+```
+
+### Testar o modelo localmente (primeiro passo utilizável)
+Assim que a role `roles/aiplatform.user` estiver concedida:
+```powershell
+# aponte para o modelo afinado (ou omita para usar o Gemini base de fallback):
+$env:TUNED_ENDPOINT = "projects/.../locations/.../endpoints/123"
+uv run python inferir_local.py --image caminho\foto.jpg --motivo "Mancha"
+```
+Imprime o JSON de julgamento. Não depende de Outlook, Cloud Run ou Firestore.
+
+### Serviços GCP integrados
+| Necessidade | Serviço |
+|---|---|
+| Receber e-mail (Outlook) | Microsoft Graph API + Azure App Registration (segredo no Secret Manager) |
+| Fluxo online (webhook + inferência) | Cloud Run (serviço) — `deploy/Dockerfile.intake` |
+| Re-treino em lote | Cloud Run Job disparado por Pub/Sub — `deploy/Dockerfile.retrain` |
+| Gatilho de re-treino | Pub/Sub (`retrain-trigger`) |
+| Imagens recebidas | Cloud Storage (`inbox/` no bucket `azzas-defeitos`) |
+| Registros + contador + fila | Firestore |
+| Renovar subscription do Graph | Cloud Scheduler |
+| Modelo afinado | Vertex AI (endpoint ativo em `config/active_model`) |
+
+> **Segurança em produção:** o Cloud Run/Job usa a **identidade da service account
+> anexada** (sem `sa_key.json`); só as credenciais Azure ficam no Secret Manager.
+
+### Config de runtime (variáveis de ambiente — `app/settings.py`)
+| Variável | Default | Observação |
+|---|---|---|
+| `RETRAIN_THRESHOLD_INPUTS` | `100` | Nº de rótulos confirmados para disparar re-treino |
+| `CONFIDENCE_THRESHOLD` | `0.70` | Corte da política híbrida (espelha o system_instruction) |
+| `TUNED_ENDPOINT` | — | Endpoint do modelo (senão lê `config/active_model` no Firestore) |
+| `AZURE_TENANT_ID` / `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` | — | App registration (Secret Manager) |
+| `GRAPH_MAILBOX` | `dados@somagrupo.com.br` | Caixa monitorada |
 
 ## Autenticação — NÃO é API key
 

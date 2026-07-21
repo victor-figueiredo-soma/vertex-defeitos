@@ -1,0 +1,19 @@
+# Servico Cloud Run: webhook do Graph + pipeline de inferencia.
+# Build a partir da raiz do repo:
+#   docker build -f deploy/Dockerfile.intake -t intake .
+FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim
+
+WORKDIR /app
+
+# Camada de dependencias (cacheavel): instala a partir do lockfile.
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
+
+# Codigo da aplicacao.
+COPY . .
+
+ENV PORT=8080
+EXPOSE 8080
+
+# Cloud Run injeta $PORT; gunicorn serve o app Flask do webhook.
+CMD ["sh", "-c", "uv run gunicorn -b :${PORT} --timeout 120 app.intake.webhook:app"]

@@ -1,0 +1,14 @@
+# Cloud Run Job: re-treino em lote (disparado pelo Pub/Sub retrain-trigger).
+# Build a partir da raiz do repo:
+#   docker build -f deploy/Dockerfile.retrain -t retrain .
+FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim
+
+WORKDIR /app
+
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
+
+COPY . .
+
+# Job de execucao unica: constroi dataset dos confirmados, sobe e dispara o tuning.
+CMD ["uv", "run", "python", "-m", "app.retrain.run_retrain"]

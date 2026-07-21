@@ -1,8 +1,19 @@
+# Alternativa sem uv (o caminho recomendado e "uv sync"; ver pyproject.toml).
+
 # Geracao de dataset (gerar_dataset.py)
 Pillow>=10.0.0
 
-# Upload para Cloud Storage (upload_gcs.py)
+# Cloud Storage (upload_gcs.py)
 google-cloud-storage>=2.14.0
 
 # Fine-tuning no Vertex AI (criar_tuning_job.py) - inclui o pacote vertexai
 google-cloud-aiplatform>=1.71.0
+
+# Aplicacao de producao (app/)
+flask>=3.1.0                     # webhook Cloud Run (app/intake/webhook.py)
+gunicorn>=23.0.0                 # servidor WSGI em producao
+requests>=2.31.0                 # chamadas HTTP ao Microsoft Graph
+msal>=1.31.0                     # auth Azure (client credentials)
+google-cloud-firestore>=2.16.0  # registros + contador
+google-cloud-pubsub>=2.21.0     # gatilho de re-treino
+google-cloud-secret-manager>=2.20.0  # segredos (Azure) em producao
