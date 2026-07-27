@@ -10,6 +10,35 @@ verificada do projeto (soma-ai-hub).
 
 import os
 
+
+# ----------------------------------------------------------------------------
+# .env local (opcional)
+# ----------------------------------------------------------------------------
+def _carregar_dotenv(caminho=None):
+    """Le um .env simples (KEY=VALUE) para dentro de os.environ.
+
+    Serve so ao desenvolvimento local: em producao (Cloud Run) as variaveis vem
+    do proprio servico / Secret Manager e o arquivo nem existe. Por isso usa
+    setdefault — o ambiente real SEMPRE vence o arquivo. Chaves sem valor sao
+    ignoradas, para nao mascarar os defaults do codigo com string vazia.
+    """
+    caminho = caminho or os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), ".env")
+    if not os.path.exists(caminho):
+        return
+    with open(caminho, encoding="utf-8") as f:
+        for linha in f:
+            linha = linha.strip()
+            if not linha or linha.startswith("#") or "=" not in linha:
+                continue
+            chave, _, valor = linha.partition("=")
+            valor = valor.strip().strip('"').strip("'")
+            if valor:
+                os.environ.setdefault(chave.strip(), valor)
+
+
+_carregar_dotenv()  # antes de qualquer os.environ.get abaixo
+
 # ----------------------------------------------------------------------------
 # Projeto / regiao GCP
 # ----------------------------------------------------------------------------
@@ -42,22 +71,43 @@ TUNED_MODEL_DISPLAY_NAME = os.environ.get(
 # ----------------------------------------------------------------------------
 # Credenciais (Service Account)
 # ----------------------------------------------------------------------------
-# Vertex/Storage autenticam por Service Account (ADC), NAO por API key.
-# Se GOOGLE_APPLICATION_CREDENTIALS ja estiver setada, ela tem prioridade.
+# Vertex/Storage/Firestore autenticam por Service Account (ADC), NAO por API key.
+# Chave em arquivo e apenas UMA das formas de entregar essa identidade.
 DEFAULT_SA_KEY = r"C:\Users\Victor_figueiredo\Documents\Atacado\sa_key.json"
 
 
 def ensure_credentials():
-    """Garante que o ADC aponte para a chave da Service Account."""
-    if not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
-        if os.path.exists(DEFAULT_SA_KEY):
-            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = DEFAULT_SA_KEY
-        else:
-            raise RuntimeError(
-                "Credencial nao encontrada. Defina GOOGLE_APPLICATION_CREDENTIALS "
-                f"ou coloque a chave em {DEFAULT_SA_KEY}."
-            )
-    return os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
+    """Garante que exista uma credencial utilizavel (ADC). Retorna o caminho da
+    chave, ou None quando o ADC vem do ambiente (sem arquivo).
+
+    Ordem:
+      1) GOOGLE_APPLICATION_CREDENTIALS ja definida — vence sempre.
+      2) Chave no caminho padrao (DEFAULT_SA_KEY) — conveniencia local.
+      3) ADC do ambiente — SA anexada ao Cloud Run (metadata server) ou
+         `gcloud auth application-default login`. NAO ha arquivo aqui, e e o
+         caminho correto em producao: exigir chave quebraria o deploy.
+    So falha se nenhum dos tres existir.
+    """
+    if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+        return os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
+
+    if os.path.exists(DEFAULT_SA_KEY):
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = DEFAULT_SA_KEY
+        return DEFAULT_SA_KEY
+
+    import google.auth
+    from google.auth.exceptions import DefaultCredentialsError
+
+    try:
+        google.auth.default()
+    except DefaultCredentialsError as e:
+        raise RuntimeError(
+            "Credencial nao encontrada. Em producao, anexe uma Service Account ao "
+            "Cloud Run. Localmente, defina GOOGLE_APPLICATION_CREDENTIALS, coloque "
+            f"a chave em {DEFAULT_SA_KEY}, ou rode "
+            "`gcloud auth application-default login`."
+        ) from e
+    return None
 
 
 # Diretorio local com as saidas do gerar_dataset.py (relativo a este arquivo).

@@ -86,15 +86,22 @@ Imprime o JSON de julgamento. Não depende de Outlook, Cloud Run ou Firestore.
 
 ## Autenticação — NÃO é API key
 
-O Vertex AI e o Cloud Storage autenticam por **Service Account (ADC)**, não por
-API key. Configure a credencial de uma destas formas (a 1ª tem prioridade):
+Vertex AI, Cloud Storage, Firestore e Pub/Sub autenticam por **Service Account
+(ADC)**, não por API key. Chave em arquivo é apenas *uma* das formas de entregar
+essa identidade — `config.ensure_credentials()` resolve nesta ordem:
 
 ```powershell
-# Opção A: variável de ambiente
+# Opção A: variável de ambiente (vence sempre)
 $env:GOOGLE_APPLICATION_CREDENTIALS = "C:\Users\Victor_figueiredo\Documents\Atacado\sa_key.json"
 
-# Opção B: deixar a chave no caminho padrão (config.DEFAULT_SA_KEY) — já é o default
+# Opção B: chave no caminho padrão (config.DEFAULT_SA_KEY) — é o que o .env já faz
+
+# Opção C: ADC do ambiente, SEM arquivo de chave
+gcloud auth application-default login
 ```
+
+**Em produção não há chave nenhuma:** o Cloud Run usa a SA anexada ao serviço
+(via metadata server), que cai na opção C. Nunca embuta `sa_key.json` na imagem.
 
 ### Permissões (IAM) necessárias na Service Account, no projeto `soma-ai-hub`
 
@@ -102,6 +109,11 @@ $env:GOOGLE_APPLICATION_CREDENTIALS = "C:\Users\Victor_figueiredo\Documents\Atac
 |---|---|
 | `roles/aiplatform.user` | Criar e rodar o tuning job / inferência |
 | `roles/storage.admin` (ou `objectAdmin` no bucket) | Criar bucket e subir/ler as fotos |
+| `roles/datastore.user` | Ler/gravar os registros e o contador no Firestore |
+| `roles/pubsub.publisher` | Publicar o gatilho de re-treino em `retrain-trigger` |
+
+Os dois últimos só afetam o app de produção (`app/`), não os scripts de dataset
+e tuning. Sem eles a autenticação passa e a chamada falha com `PermissionDenied`.
 
 > Verificado em 2026-07-16: faltava `roles/aiplatform.user` — peça a um admin do
 > `soma-ai-hub` para conceder antes de rodar o tuning.

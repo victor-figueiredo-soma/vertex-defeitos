@@ -4,6 +4,11 @@ sa_key.json
 *.key
 *-key.json
 
+# Config local com segredos. O .env.example (sem segredos) VAI para o git.
+.env
+.env.*
+!.env.example
+
 # Artefatos gerados pelo gerar_dataset.py (regeneraveis, grandes)
 build/
 
