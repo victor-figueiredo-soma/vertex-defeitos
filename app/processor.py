@@ -52,25 +52,43 @@ def decidir_acao(julgamento):
     return "responder", f"{resultado} com confianca {confianca:.2f}"
 
 
-def montar_resposta_cliente(julgamento):
-    """Texto do e-mail de resposta automatica. Funcao PURA."""
-    resultado = julgamento.get("resultado")
-    justificativa = julgamento.get("justificativa") or ""
-    if resultado == "APROVADO":
+def montar_resposta_cliente(julgamento, motivo_alegado=""):
+    """Texto do e-mail de resposta automatica. Funcao PURA.
+
+    NAO repassa a `justificativa` nem o `defeito_identificado` do modelo. Medido
+    em 2026-08-03 (build/RELATORIO_TESTE_PASTA.md): quando o cliente alega um
+    motivo especifico, o modelo ECOA a alegacao em vez de identificar o defeito -
+    num tecido rasgado alegado como "Mancha" ele respondeu "Mancha localizada
+    identificada na peca". A causa e o dataset: `defeito_identificado` foi
+    derivado do mesmo nome de arquivo que `motivo_alegado`, logo sao iguais em
+    166/166 exemplos de treino.
+
+    A DECISAO (aprovar/reprovar) se manteve correta nos testes; a EXPLICACAO nao.
+    Como este texto vai para o cliente, ele e montado aqui a partir do motivo que
+    NOS extraimos do e-mail — nunca de texto livre gerado pelo modelo. O
+    julgamento completo continua indo integral para ALERT_EMAIL, onde um humano
+    sabe interpretar.
+    """
+    alegado = (motivo_alegado or "").strip()
+    trecho_motivo = f' referente a "{alegado}"' if alegado else ""
+
+    if julgamento.get("resultado") == "APROVADO":
         return (
             "Olá!\n\n"
-            "Sua solicitação de devolução foi APROVADA.\n\n"
-            f"Análise: {justificativa}\n\n"
+            f"Analisamos as imagens enviadas e sua solicitação de devolução"
+            f"{trecho_motivo} foi APROVADA.\n\n"
+            "Confirmamos a presença de defeito na peça.\n\n"
             "Em breve você receberá as instruções de postagem.\n\n"
             "Atenciosamente,\nEquipe de Devoluções"
         )
     return (
         "Olá!\n\n"
-        "Após análise das imagens enviadas, sua solicitação de devolução "
-        "NÃO foi aprovada.\n\n"
-        f"Análise: {justificativa}\n\n"
+        f"Analisamos as imagens enviadas e sua solicitação de devolução"
+        f"{trecho_motivo} NÃO foi aprovada: não identificamos, nas fotos "
+        "recebidas, defeito compatível com o motivo informado.\n\n"
         "Se você acredita que houve um engano, responda este e-mail com novas "
-        "fotos da peça que mostrem claramente o defeito alegado.\n\n"
+        "fotos que mostrem o defeito de perto e com boa iluminação — vamos "
+        "reavaliar.\n\n"
         "Atenciosamente,\nEquipe de Devoluções"
     )
 
@@ -175,9 +193,10 @@ def processar_mensagem(message_id):
     acao, motivo_acao = decidir_acao(julgamento)
     try:
         if acao == "responder":
-            graph_client.send_mail(frm, f"Re: {subject}",
-                                   montar_resposta_cliente(julgamento),
-                                   reply_to_message_id=message_id)
+            graph_client.send_mail(
+                frm, f"Re: {subject}",
+                montar_resposta_cliente(julgamento, parsed["motivo"]),
+                reply_to_message_id=message_id)
         else:
             graph_client.send_mail(frm, f"Re: {subject}", RESPOSTA_EM_ANALISE,
                                    reply_to_message_id=message_id)
@@ -190,6 +209,12 @@ def processar_mensagem(message_id):
                 f"  confianca: {julgamento.get('confianca')}\n"
                 f"  defeito identificado: {julgamento.get('defeito_identificado')}\n"
                 f"  justificativa: {julgamento.get('justificativa')}\n\n"
+                "ATENCAO ao ler os dois ultimos campos: o modelo tende a ECOAR o\n"
+                "motivo alegado em vez de identificar o defeito de fato (os dois\n"
+                "campos eram iguais em 166/166 exemplos de treino). Confie na\n"
+                "imagem, nao na descricao. Ver build/RELATORIO_TESTE_PASTA.md.\n\n"
+                "Nota: 'confianca' nao e incerteza calibrada - vale 1.0 em toda\n"
+                "foto nitida e 0.35 em imagem degradada, sem meio-termo.\n\n"
                 f"Responda ao cliente diretamente: {frm}")
     except Exception:
         log.exception("falha ao enviar resposta para %s", frm)

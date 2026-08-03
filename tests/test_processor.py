@@ -53,13 +53,33 @@ def test_confianca_ausente_revisa():
     assert acao == "revisar"
 
 
-def test_resposta_aprovado_contem_veredito_e_justificativa():
-    txt = processor.montar_resposta_cliente(_julg("APROVADO"))
+def test_resposta_aprovado_contem_veredito_e_motivo_alegado():
+    txt = processor.montar_resposta_cliente(_julg("APROVADO"), "Fio puxado")
     assert "APROVADA" in txt
-    assert "Mancha identificada." in txt
+    assert "Fio puxado" in txt
 
 
 def test_resposta_reprovado_orienta_novas_fotos():
-    txt = processor.montar_resposta_cliente(_julg("REPROVADO"))
+    txt = processor.montar_resposta_cliente(_julg("REPROVADO"), "Mancha")
     assert "NÃO foi aprovada" in txt
     assert "novas" in txt.lower()
+
+
+def test_resposta_nunca_repassa_texto_do_modelo():
+    """O modelo ecoa o motivo alegado; a justificativa dele pode nomear o defeito
+    errado. Ver build/RELATORIO_TESTE_PASTA.md - num tecido rasgado alegado como
+    'Mancha' ele respondeu 'Mancha localizada identificada'."""
+    julg = _julg("APROVADO")
+    julg["justificativa"] = "Mancha localizada identificada na peça."
+    julg["defeito_identificado"] = "Mancha"
+    for resultado in ("APROVADO", "REPROVADO"):
+        julg["resultado"] = resultado
+        txt = processor.montar_resposta_cliente(julg, "Furo")
+        assert "Mancha" not in txt, f"{resultado} vazou a justificativa do modelo"
+        assert "localizada identificada" not in txt
+
+
+def test_resposta_sem_motivo_nao_quebra():
+    txt = processor.montar_resposta_cliente(_julg("APROVADO"), "")
+    assert "APROVADA" in txt
+    assert '""' not in txt  # nao deixa aspas vazias no texto
