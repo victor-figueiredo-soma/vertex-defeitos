@@ -29,15 +29,20 @@ import unicodedata
 # ----------------------------------------------------------------------------
 # Configuracao
 # ----------------------------------------------------------------------------
-BASE = r"O:\Atacado\39. Programas Digitais\Leo"
-SRC_DIR = os.path.join(BASE, "dataset_defeitos")
-PROJ_DIR = os.path.join(BASE, "vertex-defeitos")
+PROJ_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE = os.path.dirname(PROJ_DIR)
+SRC_DIR = os.environ.get("DATASET_ORIGEM", os.path.join(BASE, "dataset_defeitos"))
 BUILD_DIR = os.path.join(PROJ_DIR, "build")
 STAGING_DIR = os.path.join(BUILD_DIR, "staging")
+# Os JSONL vao para dataset/ (versionado); as imagens ficam em build/ (fora do git).
+DATASET_DIR = os.path.join(PROJ_DIR, "dataset")
 SYSTEM_INSTRUCTION_FILE = os.path.join(PROJ_DIR, "system_instruction.md")
 
-# Prefixo do bucket no Cloud Storage. Ajuste para o seu bucket real antes de subir.
-GCS_PREFIX = "gs://azzas-defeitos/staging"
+# Prefixo do bucket no Cloud Storage, usado nos fileUri de cada exemplo.
+# Vem de GCS_BUCKET (mesma variavel que o config.py le) para que o JSONL gerado
+# aqui e o upload_gcs.py nunca apontem para buckets diferentes.
+GCS_BUCKET = os.environ.get("GCS_BUCKET", "vertex-defeitos")
+GCS_PREFIX = f"gs://{GCS_BUCKET}/staging"
 
 VAL_RATIO = 0.15          # fracao para validacao
 MIN_GROUP_FOR_VAL = 4     # grupos menores que isso ficam inteiros no treino
@@ -242,6 +247,7 @@ def jsonl_line(system_instruction, file_uri, mime, motivo, alvo):
 def main():
     random.seed(SEED)
     os.makedirs(STAGING_DIR, exist_ok=True)
+    os.makedirs(DATASET_DIR, exist_ok=True)
     system_instruction = load_system_instruction()
 
     registros = []          # exemplos validos
@@ -356,12 +362,12 @@ def main():
         return jsonl_line(system_instruction, a["file_uri"], "image/jpeg",
                           a["motivo"], derivar_inconclusivo(a["motivo"], a["kind"]))
 
-    with open(os.path.join(BUILD_DIR, "train.jsonl"), "w", encoding="utf-8") as f:
+    with open(os.path.join(DATASET_DIR, "train.jsonl"), "w", encoding="utf-8") as f:
         for r in train:
             f.write(json.dumps(line_real(r), ensure_ascii=False) + "\n")
         for a in aug_records:
             f.write(json.dumps(line_aug(a), ensure_ascii=False) + "\n")
-    with open(os.path.join(BUILD_DIR, "validation.jsonl"), "w", encoding="utf-8") as f:
+    with open(os.path.join(DATASET_DIR, "validation.jsonl"), "w", encoding="utf-8") as f:
         for r in val:
             f.write(json.dumps(line_real(r), ensure_ascii=False) + "\n")
 

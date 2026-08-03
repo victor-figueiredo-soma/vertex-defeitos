@@ -4,8 +4,20 @@ sa_key.json
 *.key
 *-key.json
 
-# Artefatos gerados pelo gerar_dataset.py (regeneraveis, grandes)
+# Config local. O .env.example (sem segredos) VAI para o git.
+.env
+.env.*
+!.env.example
+
+# Artefatos regeneraveis e grandes: imagens de staging (96 MB + 31 MB),
+# relatorios de avaliacao, manifestos, logs. As imagens vivem no GCS.
 build/
+
+# dataset/ e a EXCECAO: os JSONL sao versionados de proposito (~2,8 MB). Sao a
+# especificacao exata do que foi treinado - sem eles nao ha como reproduzir nem
+# auditar o modelo afinado. As imagens que eles referenciam ficam no GCS.
+!dataset/
+!dataset/*.jsonl
 
 # Python
 __pycache__/
