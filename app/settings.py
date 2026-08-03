@@ -82,9 +82,16 @@ WEBHOOK_CLIENT_STATE = os.environ.get("WEBHOOK_CLIENT_STATE", "").strip()
 # ----------------------------------------------------------------------------
 # Alertas e servidor
 # ----------------------------------------------------------------------------
-# Falhas de processamento (Vertex fora do ar, Graph com erro, e-mail sem imagem
-# repetido...) sao enviadas para este endereco.
+# ERROS DE EXECUCAO: Vertex fora do ar, Graph com erro, falha ao responder o
+# cliente. E o canal de "algo quebrou, alguem precisa olhar o sistema".
 ALERT_EMAIL = os.environ.get("ALERT_EMAIL", "").strip()
+
+# FILA DE REVISAO HUMANA: casos em que o modelo nao decide sozinho (INCONCLUSIVO,
+# confianca abaixo do limiar, ou requer_revisao_manual). Nao e erro - e trabalho
+# a fazer: o cliente recebeu "em analise" e alguem precisa julgar e responder.
+# Proposito diferente do ALERT_EMAIL, dai o endereco separado; se vazio, cai no
+# ALERT_EMAIL para o caso nunca morrer em silencio.
+REVIEW_EMAIL = os.environ.get("REVIEW_EMAIL", "").strip() or ALERT_EMAIL
 
 PORT = int(os.environ.get("PORT", "8080"))
 

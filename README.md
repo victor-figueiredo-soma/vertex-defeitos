@@ -18,10 +18,20 @@ e-mail chega na caixa monitorada
             busca e-mail + anexos ──► foto + motivo ──► inferência (endpoint afinado)
               ├─ APROVADO/REPROVADO com confiança ≥ 0.70 → responde o cliente
               ├─ INCONCLUSIVO / confiança < 0.70 → cliente: "em análise"
-              │                                    ALERT_EMAIL: caso p/ humano
+              │                                    REVIEW_EMAIL: caso p/ humano
               ├─ e-mail sem foto → responde pedindo a foto
-              └─ qualquer falha (Vertex, Graph) → alerta em ALERT_EMAIL
+              └─ qualquer falha (Vertex, Graph) → ALERT_EMAIL
 ```
+
+Toda resposta ao cliente vai para o **remetente original** (`message.from`), como
+reply na mesma thread. Os dois canais internos têm propósitos distintos:
+
+| Canal | Recebe | Prefixo do assunto |
+|---|---|---|
+| `ALERT_EMAIL` | **erros de execução** — Vertex/Graph fora do ar, falha ao enviar | `[vertex-defeitos ERRO]` |
+| `REVIEW_EMAIL` | **fila de revisão humana** — não é erro, é devolução esperando decisão | `[vertex-defeitos REVISAO]` |
+
+`REVIEW_EMAIL` vazio cai em `ALERT_EMAIL`, para nenhum caso morrer em silêncio.
 
 | Módulo | Função |
 |---|---|
@@ -47,7 +57,8 @@ e-mail chega na caixa monitorada
 | `GCP_LOCATION` | `us-central1` |
 | `VERTEX_ENDPOINT_ID` | `711146528659472384` (ou o resource name completo) |
 | `GOOGLE_APPLICATION_CREDENTIALS_JSON` | o **conteúdo** do JSON da Service Account |
-| `ALERT_EMAIL` | destino dos alertas de falha e dos casos de revisão humana |
+| `ALERT_EMAIL` | erros de execução (Vertex/Graph fora do ar) |
+| `REVIEW_EMAIL` | fila de revisão humana (opcional — cai em `ALERT_EMAIL`) |
 | `GRAPH_MAILBOX` | caixa monitorada (default `dados@somagrupo.com.br`) |
 
    O boot **recusa subir** se faltar variável crítica — melhor que aceitar

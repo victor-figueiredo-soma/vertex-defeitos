@@ -83,3 +83,47 @@ def test_resposta_sem_motivo_nao_quebra():
     txt = processor.montar_resposta_cliente(_julg("APROVADO"), "")
     assert "APROVADA" in txt
     assert '""' not in txt  # nao deixa aspas vazias no texto
+
+
+# ---------------------------------------------------------------------------
+# Roteamento das notificacoes internas: erro e revisao sao canais distintos.
+# ---------------------------------------------------------------------------
+def _capturar_envios(monkeypatch):
+    enviados = []
+    monkeypatch.setattr(processor.graph_client, "send_mail",
+                        lambda to, subj, body, **kw: enviados.append((to, subj)))
+    return enviados
+
+
+def test_erro_vai_para_alert_email(monkeypatch):
+    enviados = _capturar_envios(monkeypatch)
+    monkeypatch.setattr(processor.settings, "ALERT_EMAIL", "erros@x.com")
+    monkeypatch.setattr(processor.settings, "REVIEW_EMAIL", "revisao@x.com")
+    processor.alertar("Falha na Vertex", "detalhe")
+    assert enviados == [("erros@x.com", "[vertex-defeitos ERRO] Falha na Vertex")]
+
+
+def test_revisao_vai_para_review_email(monkeypatch):
+    enviados = _capturar_envios(monkeypatch)
+    monkeypatch.setattr(processor.settings, "ALERT_EMAIL", "erros@x.com")
+    monkeypatch.setattr(processor.settings, "REVIEW_EMAIL", "revisao@x.com")
+    processor.enfileirar_revisao("INCONCLUSIVO - imagem ruim", "detalhe")
+    assert enviados[0][0] == "revisao@x.com"
+    assert "REVISAO" in enviados[0][1]
+
+
+def test_notificacao_sem_destino_nao_levanta(monkeypatch):
+    """Chamado de dentro de handler de erro: falhar aqui mascararia o original."""
+    _capturar_envios(monkeypatch)
+    monkeypatch.setattr(processor.settings, "ALERT_EMAIL", "")
+    monkeypatch.setattr(processor.settings, "REVIEW_EMAIL", "")
+    processor.alertar("x", "y")
+    processor.enfileirar_revisao("x", "y")
+
+
+def test_send_mail_que_falha_nao_propaga(monkeypatch):
+    def explode(*a, **kw):
+        raise RuntimeError("Graph fora do ar")
+    monkeypatch.setattr(processor.graph_client, "send_mail", explode)
+    monkeypatch.setattr(processor.settings, "ALERT_EMAIL", "erros@x.com")
+    processor.alertar("x", "y")  # nao deve levantar

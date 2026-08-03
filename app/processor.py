@@ -110,16 +110,36 @@ RESPOSTA_SEM_IMAGEM = (
 )
 
 
-def alertar(assunto, corpo):
-    """Envia alerta para ALERT_EMAIL. Nunca levanta: alerta que falha vira log."""
-    if not settings.ALERT_EMAIL:
-        log.error("ALERT_EMAIL nao configurado; alerta perdido: %s", assunto)
+def _notificar(destino, prefixo, assunto, corpo, rotulo_config):
+    """Envia notificacao interna. Nunca levanta: notificacao que falha vira log.
+
+    Nao pode propagar excecao porque e chamada de dentro dos handlers de erro -
+    falhar aqui mascararia o problema original.
+    """
+    if not destino:
+        log.error("%s nao configurado; notificacao perdida: %s",
+                  rotulo_config, assunto)
         return
     try:
-        graph_client.send_mail(settings.ALERT_EMAIL,
-                               f"[vertex-defeitos] {assunto}", corpo)
+        graph_client.send_mail(destino, f"{prefixo} {assunto}", corpo)
     except Exception:
-        log.exception("falha ao enviar alerta '%s'", assunto)
+        log.exception("falha ao notificar '%s'", assunto)
+
+
+def alertar(assunto, corpo):
+    """ERRO DE EXECUCAO -> ALERT_EMAIL. Algo quebrou; alguem olha o sistema."""
+    _notificar(settings.ALERT_EMAIL, "[vertex-defeitos ERRO]",
+               assunto, corpo, "ALERT_EMAIL")
+
+
+def enfileirar_revisao(assunto, corpo):
+    """REVISAO HUMANA -> REVIEW_EMAIL. Nao e erro: e devolucao esperando decisao.
+
+    O cliente ja recebeu "em analise"; se ninguem for avisado, o caso morre em
+    silencio. Por isso REVIEW_EMAIL cai no ALERT_EMAIL quando nao configurado.
+    """
+    _notificar(settings.REVIEW_EMAIL, "[vertex-defeitos REVISAO]",
+               assunto, corpo, "REVIEW_EMAIL/ALERT_EMAIL")
 
 
 def processar_mensagem(message_id):
@@ -200,8 +220,8 @@ def processar_mensagem(message_id):
         else:
             graph_client.send_mail(frm, f"Re: {subject}", RESPOSTA_EM_ANALISE,
                                    reply_to_message_id=message_id)
-            alertar(
-                f"Revisao humana: {julgamento.get('resultado')} ({motivo_acao})",
+            enfileirar_revisao(
+                f"{julgamento.get('resultado')} - {motivo_acao}",
                 f"de: {frm}\nassunto: {subject}\nmessage_id: {message_id}\n"
                 f"motivo alegado: {parsed['motivo']}\n\n"
                 f"julgamento do modelo:\n"
