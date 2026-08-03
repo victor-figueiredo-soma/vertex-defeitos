@@ -1,0 +1,193 @@
+# ============================================================================
+# GERADO AUTOMATICAMENTE - nao editar a mao.
+#
+# A fonte da verdade das dependencias e pyproject.toml + uv.lock. Este arquivo
+# existe apenas como caminho alternativo para quem instala com pip:
+#     pip install -r requirements.txt
+#
+# O Dockerfile (e portanto o Railway) NAO usa este arquivo - instala do lock via
+# `uv sync --frozen`, que e reproduzivel.
+#
+# Regenere sempre que mexer nas dependencias, senao ele diverge do lock:
+#     uv export --no-dev --no-hashes --no-emit-project -o requirements.txt
+# ============================================================================
+annotated-doc==0.0.5
+    # via fastapi
+annotated-types==0.7.0
+    # via pydantic
+anyio==4.14.2
+    # via
+    #   google-genai
+    #   httpx
+    #   starlette
+certifi==2026.6.17
+    # via
+    #   google-cloud-aiplatform
+    #   httpcore
+    #   httpx
+    #   requests
+cffi==2.1.0 ; platform_python_implementation != 'PyPy'
+    # via cryptography
+charset-normalizer==3.4.9
+    # via requests
+click==8.4.2
+    # via uvicorn
+colorama==0.4.6 ; sys_platform == 'win32'
+    # via click
+cryptography==49.0.0
+    # via
+    #   google-auth
+    #   msal
+    #   pyjwt
+distro==1.9.0
+    # via google-genai
+docstring-parser==0.18.0
+    # via google-cloud-aiplatform
+fastapi==0.141.1
+    # via vertex-defeitos
+google-api-core==2.32.0
+    # via
+    #   google-cloud-aiplatform
+    #   google-cloud-bigquery
+    #   google-cloud-core
+    #   google-cloud-resource-manager
+    #   google-cloud-storage
+google-auth==2.56.1
+    # via
+    #   google-api-core
+    #   google-cloud-aiplatform
+    #   google-cloud-bigquery
+    #   google-cloud-core
+    #   google-cloud-resource-manager
+    #   google-cloud-storage
+    #   google-genai
+google-cloud-aiplatform==1.161.0
+    # via vertex-defeitos
+google-cloud-bigquery==3.42.2
+    # via google-cloud-aiplatform
+google-cloud-core==2.6.0
+    # via
+    #   google-cloud-bigquery
+    #   google-cloud-storage
+google-cloud-resource-manager==1.18.0
+    # via google-cloud-aiplatform
+google-cloud-storage==3.13.0
+    # via
+    #   google-cloud-aiplatform
+    #   vertex-defeitos
+google-crc32c==1.8.0
+    # via
+    #   google-cloud-storage
+    #   google-resumable-media
+google-genai==2.11.0
+    # via
+    #   google-cloud-aiplatform
+    #   vertex-defeitos
+google-resumable-media==2.10.0
+    # via
+    #   google-cloud-bigquery
+    #   google-cloud-storage
+googleapis-common-protos==1.75.0
+    # via
+    #   google-api-core
+    #   grpc-google-iam-v1
+    #   grpcio-status
+grpc-google-iam-v1==0.14.4
+    # via google-cloud-resource-manager
+grpcio==1.82.1
+    # via
+    #   google-api-core
+    #   google-cloud-resource-manager
+    #   googleapis-common-protos
+    #   grpc-google-iam-v1
+    #   grpcio-status
+grpcio-status==1.81.1
+    # via google-api-core
+h11==0.16.0
+    # via
+    #   httpcore
+    #   uvicorn
+httpcore==1.0.9
+    # via httpx
+httpx==0.28.1
+    # via google-genai
+idna==3.18
+    # via
+    #   anyio
+    #   httpx
+    #   requests
+msal==1.37.0
+    # via vertex-defeitos
+packaging==26.2
+    # via
+    #   google-cloud-aiplatform
+    #   google-cloud-bigquery
+pillow==12.3.0
+    # via vertex-defeitos
+proto-plus==1.28.1
+    # via
+    #   google-api-core
+    #   google-cloud-aiplatform
+    #   google-cloud-resource-manager
+protobuf==6.33.6
+    # via
+    #   google-api-core
+    #   google-cloud-aiplatform
+    #   google-cloud-resource-manager
+    #   googleapis-common-protos
+    #   grpc-google-iam-v1
+    #   grpcio-status
+    #   proto-plus
+pyasn1==0.6.4
+    # via pyasn1-modules
+pyasn1-modules==0.4.2
+    # via google-auth
+pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
+    # via cffi
+pydantic==2.13.4
+    # via
+    #   fastapi
+    #   google-cloud-aiplatform
+    #   google-genai
+pydantic-core==2.46.4
+    # via pydantic
+pyjwt==2.13.0
+    # via msal
+python-dateutil==2.9.0.post0
+    # via google-cloud-bigquery
+requests==2.34.2
+    # via
+    #   google-api-core
+    #   google-auth
+    #   google-cloud-bigquery
+    #   google-cloud-storage
+    #   google-genai
+    #   msal
+    #   vertex-defeitos
+six==1.17.0
+    # via python-dateutil
+sniffio==1.3.1
+    # via google-genai
+starlette==1.3.1
+    # via fastapi
+tenacity==9.1.4
+    # via google-genai
+typing-extensions==4.16.0
+    # via
+    #   fastapi
+    #   google-cloud-aiplatform
+    #   google-genai
+    #   grpcio
+    #   pydantic
+    #   pydantic-core
+    #   typing-inspection
+typing-inspection==0.4.2
+    # via
+    #   fastapi
+    #   pydantic
+urllib3==2.7.0
+    # via requests
+uvicorn==0.52.1
+    # via vertex-defeitos
+websockets==16.1.1
+    # via google-genai

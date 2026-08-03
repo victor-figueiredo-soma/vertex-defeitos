@@ -1,0 +1,15 @@
+# Nada disso entra na imagem do Railway.
+build/
+dataset/
+.venv/
+__pycache__/
+*.py[cod]
+.git/
+.env
+.env.*
+# Chaves de SA nunca entram na imagem: em runtime a credencial vem da variavel
+# GOOGLE_APPLICATION_CREDENTIALS_JSON (painel do Railway).
+*.json
+sa_key.json
+*.key
+.claude/

@@ -1,0 +1,34 @@
+[project]
+name = "vertex-defeitos"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = [
+    # SDK do Vertex AI: tuning (vertexai.tuning.sft) e inferencia em modelo-base.
+    "google-cloud-aiplatform>=1.161.0",
+    # SDK novo. NAO e opcional: e o unico que alcanca o endpoint do modelo afinado,
+    # que fica numa multi-region (locations/us) rejeitada pelo SDK legado.
+    # Vinha como dependencia transitiva do aiplatform; declarado aqui porque
+    # inferencia.py o importa direto.
+    "google-genai>=2.11.0",
+    # Upload do dataset e das imagens para o bucket.
+    "google-cloud-storage>=3.13.0",
+    # Normalizacao de imagem (imagem.py) e degradacoes do INCONCLUSIVO sintetico.
+    "pillow>=12.3.0",
+    # --- app do webhook (Railway) ---
+    "fastapi>=0.115.0",
+    "uvicorn>=0.34.0",
+    # OAuth2 app-only do Microsoft Graph.
+    "msal>=1.37.0",
+    "requests>=2.34.2",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+]
+
+[tool.pytest.ini_options]
+# permite 'import app' / 'import config' a partir da raiz do repo
+pythonpath = ["."]
+testpaths = ["tests"]
