@@ -4,9 +4,65 @@ Validação de defeitos em devoluções de vestuário (AZZAS) com Gemini afinado
 Vertex AI. Recebe a **foto da peça** + o **motivo alegado pelo cliente** e devolve um
 JSON de julgamento: `APROVADO`, `REPROVADO` ou `INCONCLUSIVO`.
 
-Este repositório contém o **modelo e o pipeline de tuning**. O app de produção
-(ingestão de e-mail, fila de revisão humana, re-treino automático) será construído
-a partir daqui.
+Este repositório contém o **modelo, o pipeline de tuning e o app de produção**:
+um webhook (FastAPI, hospedado no Railway) que recebe notificações de novos
+e-mails via Microsoft Graph, roda a inferência no modelo afinado e responde o
+cliente automaticamente — com trava de confiança e revisão humana no circuito.
+
+## App de produção — webhook
+
+```
+e-mail chega na caixa monitorada
+  └─ Graph notifica POST /webhook (clientState validado, 202 imediato)
+       └─ background task:
+            busca e-mail + anexos ──► foto + motivo ──► inferência (endpoint afinado)
+              ├─ APROVADO/REPROVADO com confiança ≥ 0.70 → responde o cliente
+              ├─ INCONCLUSIVO / confiança < 0.70 → cliente: "em análise"
+              │                                    ALERT_EMAIL: caso p/ humano
+              ├─ e-mail sem foto → responde pedindo a foto
+              └─ qualquer falha (Vertex, Graph) → alerta em ALERT_EMAIL
+```
+
+| Módulo | Função |
+|---|---|
+| `app/main.py` | Rotas FastAPI: handshake `validationToken`, validação estrita do `clientState`, 202 + BackgroundTasks |
+| `app/processor.py` | Pipeline: e-mail → inferência → política de confiança → resposta/alerta |
+| `app/graph_client.py` | Microsoft Graph: OAuth2 app-only (MSAL), ler mensagem/anexos, `send_mail`, subscriptions |
+| `app/email_parser.py` | Funções puras: extrai foto (anexo) e motivo (assunto/corpo) da mensagem |
+| `app/settings.py` | Env vars do app; credencial GCP via `GOOGLE_APPLICATION_CREDENTIALS_JSON` |
+| `app/subscription.py` | CLI: criar/listar/renovar a subscription do Graph |
+
+### Deploy no Railway
+
+1. Crie o serviço apontando para este repo — o `Dockerfile` é detectado
+   automaticamente e o `.dockerignore` corta `build/` e `dataset/` da imagem.
+2. Configure as variáveis no painel:
+
+| Variável | Valor |
+|---|---|
+| `AZURE_TENANT_ID` / `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` | app registration com permissões de aplicação **Mail.Read** e **Mail.Send** |
+| `WEBHOOK_BASE_URL` | URL pública do serviço (ex.: `https://xxx.up.railway.app`) |
+| `WEBHOOK_CLIENT_STATE` | string aleatória longa — valida cada notificação |
+| `GCP_PROJECT_ID` | `soma-ai-hub` |
+| `GCP_LOCATION` | `us-central1` |
+| `VERTEX_ENDPOINT_ID` | `711146528659472384` (ou o resource name completo) |
+| `GOOGLE_APPLICATION_CREDENTIALS_JSON` | o **conteúdo** do JSON da Service Account |
+| `ALERT_EMAIL` | destino dos alertas de falha e dos casos de revisão humana |
+| `GRAPH_MAILBOX` | caixa monitorada (default `dados@somagrupo.com.br`) |
+
+   O boot **recusa subir** se faltar variável crítica — melhor que aceitar
+   webhook e falhar em silêncio.
+3. Registre a subscription (depois do serviço no ar, pois o Graph valida a URL
+   no ato): `uv run python -m app.subscription criar`
+4. **Subscriptions de mail expiram em ~3 dias.** Agende
+   `python -m app.subscription renovar` (cron do Railway) a cada 2 dias.
+
+Rodar local: `uv run uvicorn app.main:app --port 8080`.
+
+> **Por que foto + motivo, e não o corpo do e-mail:** o modelo é multimodal por
+> construção — 100% dos exemplos de treino são `imagem + "Motivo alegado pelo
+> cliente: X"`. Ele não julga texto sozinho; e-mail sem foto recebe resposta
+> automática pedindo a foto.
 
 ## Modelo em produção
 

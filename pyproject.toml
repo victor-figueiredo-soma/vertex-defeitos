@@ -14,10 +14,17 @@ dependencies = [
     "google-cloud-storage>=3.13.0",
     # Normalizacao de imagem (imagem.py) e degradacoes do INCONCLUSIVO sintetico.
     "pillow>=12.3.0",
+    # --- app do webhook (Railway) ---
+    "fastapi>=0.115.0",
+    "uvicorn>=0.34.0",
+    # OAuth2 app-only do Microsoft Graph.
+    "msal>=1.37.0",
+    "requests>=2.34.2",
 ]
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
     "pytest>=9.1.1",
 ]
 

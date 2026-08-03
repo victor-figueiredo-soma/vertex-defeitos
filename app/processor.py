@@ -1,0 +1,198 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Pipeline de processamento de uma notificacao: e-mail -> inferencia -> resposta.
+
+Roda em background task (o webhook ja devolveu 202). Toda falha vira alerta para
+ALERT_EMAIL — nunca exception silenciosa, porque aqui ninguem esta olhando o
+terminal.
+
+Politica de resposta (decidir_acao):
+  - APROVADO/REPROVADO com confianca >= CONFIDENCE_THRESHOLD -> responde o
+    cliente automaticamente.
+  - INCONCLUSIVO, confianca baixa ou requer_revisao_manual -> cliente recebe
+    "em analise" e ALERT_EMAIL recebe o caso para decisao humana.
+  E a mesma regra do system_instruction.md (confianca < 0,70 -> revisao): o
+  modelo foi treinado com ela, o app apenas a executa.
+"""
+
+import logging
+import traceback
+
+import inferencia
+from app import email_parser, graph_client, settings
+
+log = logging.getLogger("processor")
+
+# Dedup em memoria: o Graph pode re-notificar a mesma mensagem (retry proprio ou
+# subscription duplicada). Num servico de 1 instancia como o Railway isso cobre o
+# caso comum; se um dia houver replica, trocar por um store compartilhado.
+_processadas = set()
+_MAX_PROCESSADAS = 5000
+
+
+def decidir_acao(julgamento):
+    """(acao, motivo_da_acao) para um julgamento do modelo.
+
+    acao: 'responder'  -> veredito vai direto ao cliente
+          'revisar'    -> humano decide; cliente recebe 'em analise'
+    Funcao PURA - testavel sem rede.
+    """
+    resultado = julgamento.get("resultado")
+    confianca = julgamento.get("confianca") or 0.0
+    revisao = julgamento.get("requer_revisao_manual")
+
+    if resultado == "INCONCLUSIVO":
+        return "revisar", "resultado INCONCLUSIVO"
+    if revisao:
+        return "revisar", "modelo pediu revisao manual"
+    if confianca < settings.CONFIDENCE_THRESHOLD:
+        return "revisar", (f"confianca {confianca:.2f} abaixo do limiar "
+                           f"{settings.CONFIDENCE_THRESHOLD:.2f}")
+    return "responder", f"{resultado} com confianca {confianca:.2f}"
+
+
+def montar_resposta_cliente(julgamento):
+    """Texto do e-mail de resposta automatica. Funcao PURA."""
+    resultado = julgamento.get("resultado")
+    justificativa = julgamento.get("justificativa") or ""
+    if resultado == "APROVADO":
+        return (
+            "Olá!\n\n"
+            "Sua solicitação de devolução foi APROVADA.\n\n"
+            f"Análise: {justificativa}\n\n"
+            "Em breve você receberá as instruções de postagem.\n\n"
+            "Atenciosamente,\nEquipe de Devoluções"
+        )
+    return (
+        "Olá!\n\n"
+        "Após análise das imagens enviadas, sua solicitação de devolução "
+        "NÃO foi aprovada.\n\n"
+        f"Análise: {justificativa}\n\n"
+        "Se você acredita que houve um engano, responda este e-mail com novas "
+        "fotos da peça que mostrem claramente o defeito alegado.\n\n"
+        "Atenciosamente,\nEquipe de Devoluções"
+    )
+
+
+RESPOSTA_EM_ANALISE = (
+    "Olá!\n\n"
+    "Recebemos sua solicitação de devolução. Ela está em análise pela nossa "
+    "equipe e você receberá uma resposta em breve.\n\n"
+    "Atenciosamente,\nEquipe de Devoluções"
+)
+
+RESPOSTA_SEM_IMAGEM = (
+    "Olá!\n\n"
+    "Recebemos sua solicitação de devolução, mas não encontramos nenhuma FOTO "
+    "da peça em anexo — e a análise depende dela.\n\n"
+    "Por favor, responda este e-mail anexando fotos que mostrem claramente o "
+    "defeito alegado.\n\n"
+    "Atenciosamente,\nEquipe de Devoluções"
+)
+
+
+def alertar(assunto, corpo):
+    """Envia alerta para ALERT_EMAIL. Nunca levanta: alerta que falha vira log."""
+    if not settings.ALERT_EMAIL:
+        log.error("ALERT_EMAIL nao configurado; alerta perdido: %s", assunto)
+        return
+    try:
+        graph_client.send_mail(settings.ALERT_EMAIL,
+                               f"[vertex-defeitos] {assunto}", corpo)
+    except Exception:
+        log.exception("falha ao enviar alerta '%s'", assunto)
+
+
+def processar_mensagem(message_id):
+    """Processa UMA mensagem, fim a fim. Chamado pela background task do webhook."""
+    if message_id in _processadas:
+        log.info("mensagem %s ja processada; ignorando re-notificacao", message_id)
+        return
+    if len(_processadas) > _MAX_PROCESSADAS:
+        _processadas.clear()
+    _processadas.add(message_id)
+
+    log.info("processando mensagem %s", message_id)
+
+    # 1. Buscar o e-mail no Graph
+    try:
+        message = graph_client.get_message(message_id)
+        attachments = graph_client.get_attachments(message_id)
+    except Exception as e:
+        log.exception("falha ao buscar mensagem %s no Graph", message_id)
+        alertar("Falha ao buscar e-mail no Graph",
+                f"message_id: {message_id}\n\n{traceback.format_exc()}")
+        return
+
+    frm = ((message.get("from") or {}).get("emailAddress") or {}).get("address", "?")
+    subject = message.get("subject") or "(sem assunto)"
+
+    # Nao responder a nos mesmos (resposta automatica nossa tambem gera notificacao
+    # de mensagem nova se cair na inbox monitorada).
+    if frm and frm.lower() == settings.GRAPH_MAILBOX.lower():
+        log.info("mensagem %s e da propria caixa; ignorando", message_id)
+        return
+
+    # 2. Extrair foto + motivo
+    try:
+        parsed = email_parser.parse(message, attachments)
+    except email_parser.EmailSemImagem:
+        log.info("mensagem %s sem imagem; pedindo foto ao remetente", message_id)
+        try:
+            graph_client.send_mail(frm, f"Re: {subject}", RESPOSTA_SEM_IMAGEM,
+                                   reply_to_message_id=message_id)
+        except Exception:
+            log.exception("falha ao responder pedido de foto")
+            alertar("Falha ao responder e-mail sem imagem",
+                    f"de: {frm}\nassunto: {subject}\nmessage_id: {message_id}")
+        return
+
+    # 3. Inferencia no Vertex
+    mime = {"jpg": "image/jpeg", ".jpg": "image/jpeg", ".png": "image/png",
+            ".webp": "image/webp"}.get(parsed["image_ext"], "image/jpeg")
+    try:
+        julgamento, endpoint = inferencia.classify(
+            parsed["image_bytes"], parsed["motivo"], mime_type=mime,
+            endpoint=settings.TUNED_ENDPOINT)
+    except Exception:
+        log.exception("falha na inferencia para %s", message_id)
+        alertar("Falha na chamada ao Vertex AI",
+                f"de: {frm}\nassunto: {subject}\nmessage_id: {message_id}\n\n"
+                f"{traceback.format_exc()}")
+        # Cliente nao fica sem resposta por causa de falha nossa.
+        try:
+            graph_client.send_mail(frm, f"Re: {subject}", RESPOSTA_EM_ANALISE,
+                                   reply_to_message_id=message_id)
+        except Exception:
+            log.exception("falha ao enviar 'em analise' apos erro de inferencia")
+        return
+
+    log.info("julgamento %s: %s (conf=%.2f)", message_id,
+             julgamento.get("resultado"), julgamento.get("confianca") or 0)
+
+    # 4. Politica de resposta
+    acao, motivo_acao = decidir_acao(julgamento)
+    try:
+        if acao == "responder":
+            graph_client.send_mail(frm, f"Re: {subject}",
+                                   montar_resposta_cliente(julgamento),
+                                   reply_to_message_id=message_id)
+        else:
+            graph_client.send_mail(frm, f"Re: {subject}", RESPOSTA_EM_ANALISE,
+                                   reply_to_message_id=message_id)
+            alertar(
+                f"Revisao humana: {julgamento.get('resultado')} ({motivo_acao})",
+                f"de: {frm}\nassunto: {subject}\nmessage_id: {message_id}\n"
+                f"motivo alegado: {parsed['motivo']}\n\n"
+                f"julgamento do modelo:\n"
+                f"  resultado: {julgamento.get('resultado')}\n"
+                f"  confianca: {julgamento.get('confianca')}\n"
+                f"  defeito identificado: {julgamento.get('defeito_identificado')}\n"
+                f"  justificativa: {julgamento.get('justificativa')}\n\n"
+                f"Responda ao cliente diretamente: {frm}")
+    except Exception:
+        log.exception("falha ao enviar resposta para %s", frm)
+        alertar("Falha ao enviar resposta ao cliente",
+                f"de: {frm}\nassunto: {subject}\nmessage_id: {message_id}\n"
+                f"acao pretendida: {acao}\n\n{traceback.format_exc()}")
